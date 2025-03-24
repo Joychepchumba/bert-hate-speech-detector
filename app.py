@@ -1,15 +1,43 @@
 import streamlit as st
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import torch
+
+# ✅ Initialize FastAPI app
+app = FastAPI()
+
+# ✅ Allow CORS (Fix for Power BI access)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all domains (Adjust as needed)
+    allow_credentials=True,
+    allow_methods=["*"],  # Allows all HTTP methods
+    allow_headers=["*"],  # Allows all headers
+)
 
 # ✅ Load model & tokenizer
 model_name = "JCKipkemboi/hate_speech_detector_bert"  # Replace with your actual model repo
 model = AutoModelForSequenceClassification.from_pretrained(model_name)
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 
-# Streamlit UI
-st.set_page_config(page_title="Hate Speech Detector", page_icon="⚠️", layout="centered")
+class TextInput(BaseModel):
+    text: str
 
+# ✅ API Endpoint for Predictions
+@app.post("/predict")
+def predict(input: TextInput):
+    """API Endpoint to classify text as Hate Speech or Not Hate Speech"""
+    inputs = tokenizer(input.text, return_tensors="pt", truncation=True, padding=True)
+    outputs = model(**inputs)
+    prediction = torch.argmax(outputs.logits, dim=-1).item()
+    
+    label = "Hate Speech" if prediction == 1 else "Not Hate Speech"
+    return {"text": input.text, "prediction": label}
+
+# ✅ Streamlit UI (For Interactive Testing)
+st.set_page_config(page_title="Hate Speech Detector", page_icon="⚠️", layout="centered")
 st.title("🛑 Hate Speech Detector")
 st.write("Enter a sentence below to check if it's **Hate Speech** or **Not Hate Speech**.")
 
@@ -17,7 +45,7 @@ st.write("Enter a sentence below to check if it's **Hate Speech** or **Not Hate 
 text = st.text_area("🔤 Enter your text:", height=100)
 
 # Predict Function
-def predict(text):
+def streamlit_predict(text):
     inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True)
     with torch.no_grad():
         outputs = model(**inputs)
@@ -33,7 +61,7 @@ def predict(text):
 if st.button("🚀 Predict"):
     if text.strip():
         with st.spinner("🔄 Processing... Please wait"):
-            label, confidence = predict(text)
+            label, confidence = streamlit_predict(text)
         st.success(f"✅ **Prediction:** {label}")
         st.write(f"📊 **Confidence:** {confidence:.2f}%")
     else:
